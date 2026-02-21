@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Dashboard v16.1 | Clean Workspace</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        .canvas-bg { background-color: #ffffff; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; }
+        .toast { animation: slideIn 0.3s ease-out forwards; position: fixed; top: 20px; right: 20px; z-index: 100; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        #social-render-area { transform: scale(0.9); transform-origin: top center; }
+        
+        .snapshot-card { transition: all 0.2s; border: 2px solid #e2e8f0; border-radius: 6px; position: relative; cursor: pointer; background: white; }
+        .snapshot-card.active { border-color: #0d9488; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        
+        .resizer { width: 4px; cursor: col-resize; background-color: #e2e8f0; transition: background-color 0.2s; z-index: 30; }
+        .resizer:hover, .resizing { background-color: #0d9488; }
+
+        #gallery-track::-webkit-scrollbar { width: 4px; }
+        #gallery-track::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex flex-col text-slate-900">
+
+    <div id="toast-area" class="pointer-events-none"></div>
+
+    <header class="h-10 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-40 shadow-sm">
+        <div class="flex items-center gap-3">
+            <h1 class="font-bold text-slate-800 text-xs italic">OSINT <span class="text-teal-600">VERIFIER</span> <span class="text-[9px] text-slate-400 font-normal ml-1">v16.1 CLEAN</span></h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="session-counter" class="text-[8px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded uppercase">Snapshots: 0</span>
+            <button onclick="window.location.reload()" class="text-[9px] font-bold text-slate-300 hover:text-red-500 uppercase tracking-widest transition">Clear Session</button>
+        </div>
+    </header>
+
+    <main id="main-container" class="flex-1 flex overflow-hidden w-full">
+        
+        <section id="col-1" class="flex flex-col bg-slate-50 shrink-0 min-w-[200px]" style="width: 25%;">
+            <div class="bg-white p-3 border-b border-slate-200 space-y-3 shadow-sm z-10">
+                <textarea id="embed-code-input" placeholder="Paste X/Twitter Embed Code..." class="w-full h-12 text-[10px] font-mono bg-slate-50 border border-slate-200 rounded p-1.5 outline-none focus:border-teal-400 resize-none leading-tight"></textarea>
+                <div class="flex gap-1">
+                    <button onclick="handleEmbedCode()" class="flex-1 bg-slate-100 text-slate-600 py-1.5 rounded text-[9px] font-bold uppercase hover:bg-slate-200 transition">Preview</button>
+                    <button onclick="popOutPreview()" class="flex-1 bg-indigo-600 text-white py-1.5 rounded text-[9px] font-bold uppercase hover:bg-indigo-700 transition shadow-sm">Isolate</button>
+                </div>
+                <button onclick="capturePreviewArea()" class="w-full bg-teal-600 text-white py-2.5 rounded text-[10px] font-bold hover:bg-teal-700 transition uppercase shadow-md flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-camera"></i> Capture Snapshot
+                </button>
+            </div>
+            <div id="viewer-display" class="flex-1 p-3 overflow-y-auto flex flex-col items-center bg-slate-100">
+                <div id="social-render-area" class="w-full"></div>
+            </div>
+        </section>
+
+        <div class="resizer" id="resizer-1"></div>
+
+        <section id="col-2" class="flex flex-col bg-white shrink-0 min-w-[350px]" style="flex: 1;">
+            <div class="h-8 border-b border-slate-200 flex items-center px-4 bg-white shrink-0">
+                <span class="text-[9px] font-bold text-teal-600 uppercase tracking-widest">Analysis Workbench</span>
+            </div>
+
+            <div class="flex-1 canvas-bg flex items-center justify-center p-8 relative overflow-hidden">
+                <canvas id="canvas" class="shadow-2xl border border-slate-300 max-w-full max-h-full object-contain hidden bg-white z-10"></canvas>
+                <div id="canvas-empty" class="text-center opacity-20">
+                    <i class="fa-solid fa-eye text-5xl mb-3"></i>
+                    <p class="text-[11px] font-bold uppercase tracking-widest">Evidence Viewer</p>
+                </div>
+            </div>
+
+            <div id="workbench-controls" class="h-14 bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-4 px-6 shrink-0 opacity-50 pointer-events-none transition-opacity">
+                <button onclick="flipCanvas()" class="bg-white text-slate-700 border border-slate-300 px-5 py-2 rounded font-bold text-[10px] uppercase hover:border-purple-500 hover:text-purple-600 transition shadow-sm flex items-center gap-2">
+                    <i class="fa-solid fa-arrows-left-right"></i> Mirror Image
+                </button>
+                <div class="h-6 w-[1px] bg-slate-300"></div>
+                <button onclick="runSearch()" class="bg-teal-600 text-white px-8 py-2.5 rounded font-bold text-[11px] uppercase tracking-widest hover:bg-teal-500 transition shadow-md flex items-center gap-2">
+                    <i class="fa-solid fa-magnifying-glass"></i> Run Global Search
+                </button>
+            </div>
+        </section>
+
+        <div class="resizer" id="resizer-2"></div>
+
+        <section id="col-3" class="flex flex-col bg-slate-50 shrink-0 min-w-[180px]" style="width: 20%;">
+            <div class="h-8 border-b border-slate-200 flex items-center px-3 justify-between bg-white shrink-0">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest italic">History</span>
+                <button onclick="clearGallery()" class="text-[8px] text-red-400 hover:text-red-600 uppercase font-bold tracking-tighter">Clear All</button>
+            </div>
+            
+            <div id="gallery-track" class="flex-1 p-3 flex flex-col gap-4 overflow-y-auto">
+                <div id="gallery-placeholder" class="mt-10 text-center opacity-30">
+                    <p class="text-[9px] font-bold uppercase italic tracking-widest">No snapshots</p>
+                </div>
+            </div>
+            
+            <div class="p-2 border-t border-slate-200 bg-white text-center">
+                <p class="text-[7px] text-slate-400 font-mono uppercase tracking-widest">Secure Intel Store</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let snapshots = [];
+        let activeSnapId = null;
+
+        const galleryTrack = document.getElementById('gallery-track');
+        const galleryPlaceholder = document.getElementById('gallery-placeholder');
+        const canvas = document.getElementById('canvas');
+        const emptyArea = document.getElementById('canvas-empty');
+        const workbenchControls = document.getElementById('workbench-controls');
+        const counter = document.getElementById('session-counter');
+
+        // RESIZING LOGIC
+        const setupResizer = (resizerId, colLeftId) => {
+            const resizer = document.getElementById(resizerId);
+            const leftCol = document.getElementById(colLeftId);
+            let x = 0, leftWidth = 0;
+
+            const mouseDownHandler = (e) => {
+                x = e.clientX;
+                leftWidth = leftCol.getBoundingClientRect().width;
+                resizer.classList.add('resizing');
+                document.addEventListener('mousemove', mouseMoveHandler);
+                document.addEventListener('mouseup', mouseUpHandler);
+                document.body.style.cursor = 'col-resize';
+            };
+
+            const mouseMoveHandler = (e) => {
+                const dx = e.clientX - x;
+                leftCol.style.width = `${leftWidth + dx}px`;
+                leftCol.style.flex = 'none';
+            };
+
+            const mouseUpHandler = () => {
+                resizer.classList.remove('resizing');
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                document.removeEventListener('mouseup', mouseUpHandler);
+                document.body.style.cursor = 'default';
+            };
+
+            resizer.addEventListener('mousedown', mouseDownHandler);
+        };
+
+        setupResizer('resizer-1', 'col-1');
+        setupResizer('resizer-2', 'col-2');
+
+        // SNAPSHOTS LOGIC
+        function addSnapshot(imgData) {
+            const snapId = Date.now();
+            snapshots.push({ id: snapId, data: imgData }); 
+            renderGallery();
+            selectSnapshot(snapId);
+            showToast("Frame Ingested", "success");
+        }
+
+        function renderGallery() {
+            galleryTrack.innerHTML = '';
+            if (snapshots.length === 0) {
+                galleryTrack.appendChild(galleryPlaceholder);
+                resetWorkbench();
+            } else {
+                snapshots.forEach((snap, index) => {
+                    const card = document.createElement('div');
+                    card.className = `snapshot-card p-1 ${snap.id === activeSnapId ? 'active' : ''}`;
+                    card.onclick = () => selectSnapshot(snap.id);
+                    card.innerHTML = `
+                        <div class="aspect-video bg-slate-100 rounded overflow-hidden">
+                            <img src="${snap.data}" class="w-full h-full object-cover">
+                        </div>
+                        <div class="mt-1 px-1 flex justify-between items-center">
+                            <span class="text-[8px] text-slate-500 font-bold uppercase">#${index + 1}</span>
+                            <button onclick="deleteSnapshot(event, ${snap.id})" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                        </div>
+                    `;
+                    galleryTrack.appendChild(card);
+                });
+            }
+            counter.innerText = `Snapshots: ${snapshots.length}`;
+        }
+
+        function selectSnapshot(id) {
+            activeSnapId = id;
+            const snap = snapshots.find(s => s.id === id);
+            if (snap) {
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = img.width; canvas.height = img.height;
+                    canvas.getContext('2d').drawImage(img, 0, 0);
+                    canvas.classList.remove('hidden'); emptyArea.classList.add('hidden');
+                    workbenchControls.classList.remove('opacity-50', 'pointer-events-none');
+                };
+                img.src = snap.data;
+            }
+            renderGallery();
+        }
+
+        function deleteSnapshot(e, id) {
+            e.stopPropagation();
+            snapshots = snapshots.filter(s => s.id !== id);
+            if (activeSnapId === id) activeSnapId = snapshots.length > 0 ? snapshots[0].id : null;
+            renderGallery();
+            if (activeSnapId) selectSnapshot(activeSnapId);
+        }
+
+        function clearGallery() {
+            if(confirm("Delete all snapshots?")) { snapshots = []; activeSnapId = null; renderGallery(); }
+        }
+
+        function resetWorkbench() {
+            canvas.classList.add('hidden'); emptyArea.classList.remove('hidden');
+            workbenchControls.classList.add('opacity-50', 'pointer-events-none');
+        }
+
+        async function capturePreviewArea() {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window", cursor: "never" } });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    setTimeout(() => {
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = video.videoWidth; tempCanvas.height = video.videoHeight;
+                        tempCanvas.getContext('2d').drawImage(video, 0, 0);
+                        addSnapshot(tempCanvas.toDataURL('image/png'));
+                        stream.getTracks().forEach(t => t.stop());
+                    }, 800);
+                };
+            } catch (err) { showToast("Capture Cancelled", "error"); }
+        }
+
+        function handleEmbedCode() {
+            const code = document.getElementById('embed-code-input').value.trim();
+            if (!code) return;
+            document.getElementById('social-render-area').innerHTML = code;
+            if (window.twttr) window.twttr.widgets.load(document.getElementById('social-render-area'));
+        }
+
+        function popOutPreview() {
+            const code = document.getElementById('embed-code-input').value.trim();
+            const pop = window.open("", "OSINT_PREVIEW_WINDOW", "width=600,height=800");
+            pop.document.write(`<html><body style="margin:0;overflow:hidden;background:#fff;"><div style="padding:30px;">${code}</div><script async src="https://platform.twitter.com/widgets.js" charset="utf-8"><\/script></body></html>`);
+            pop.document.close();
+        }
+
+        function flipCanvas() {
+            const ctx = canvas.getContext('2d');
+            const temp = document.createElement('canvas');
+            temp.width = canvas.width; temp.height = canvas.height;
+            temp.getContext('2d').drawImage(canvas, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+            ctx.drawImage(temp, 0, 0); ctx.restore();
+            const idx = snapshots.findIndex(s => s.id === activeSnapId);
+            if(idx !== -1) snapshots[idx].data = canvas.toDataURL();
+            showToast("Mirrored & Updated", "info");
+        }
+
+        function runSearch() {
+            canvas.toBlob(blob => {
+                const item = new ClipboardItem({'image/png': blob});
+                navigator.clipboard.write([item]).then(() => {
+                    showToast("Copied to Clipboard", "success");
+                    window.open('https://lens.google.com/', '_blank');
+                    window.open('https://saucenao.com/', '_blank');
+                    window.open('https://ascii2d.net/', '_blank');
+                });
+            });
+        }
+
+        function showToast(m, type) {
+            const el = document.createElement('div');
+            el.className = `toast ${type==='success'?'bg-teal-600':(type==='error'?'bg-red-600':'bg-slate-700')} text-white px-4 py-2 rounded shadow-xl text-[10px] font-bold z-50 uppercase tracking-widest`;
+            el.innerText = m;
+            document.getElementById('toast-area').appendChild(el);
+            setTimeout(() => el.remove(), 3500);
+        }
+
+        window.addEventListener('paste', e => {
+            const items = e.clipboardData.items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => addSnapshot(ev.target.result);
+                    reader.readAsDataURL(items[i].getAsFile());
+                }
+            }
+        });
+    </script>
+</body>
+</html>
